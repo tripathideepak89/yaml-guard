@@ -1,35 +1,30 @@
-# Simple YAML Guard rules for Kubernetes manifests
-# Rule structure:
-# - id: RULE_ID
-# severity: low|medium|high|critical
-# when: { kind: <K8sKind>|null } # omit/empty to apply to any YAML
-# assert:
-# - { path: <jsonpath>, not_matches: <regex> }
-# - { path: <jsonpath>, must_include: <string> }
-# - { path: <jsonpath>, equals: <value> }
-# remediation: <how to fix>
-
+# Simple YAML Guard rules for Kubernetes manifests (block style)
 
 - id: K8S-NO-LATEST-TAG
-severity: high
-when: { kind: Pod }
-assert:
-- { path: $.spec.containers[*].image, not_matches: '.*:latest$' }
-remediation: "Avoid floating tags like :latest. Pin exact tags or digests."
-
+  severity: high
+  when:
+    kind: Pod
+  assert:
+    - path: "$.spec.containers[*].image"
+      not_matches: ".*:latest$"
+  remediation: "Avoid floating tags like :latest. Pin exact tags or digests."
 
 - id: K8S-IMAGE-PIN-DIGEST
-severity: high
-when: { kind: Pod }
-assert:
-- { path: $.spec.containers[*].image, must_include: '@sha256:' }
-remediation: "Use immutable digests: repo:tag@sha256:<digest>"
-
+  severity: high
+  when:
+    kind: Pod
+  assert:
+    - path: "$.spec.containers[*].image"
+      must_include: "@sha256:"
+  remediation: "Use immutable digests: repo:tag@sha256:<digest>"
 
 - id: K8S-RESOURCES-LIMITS-PRESENT
-severity: medium
-when: { kind: Pod }
-assert:
-- { path: $.spec.containers[*].resources.limits.cpu, not_matches: '^$' }
-- { path: $.spec.containers[*].resources.limits.memory, not_matches: '^$' }
-remediation: "Define CPU/Memory limits for every container."
+  severity: medium
+  when:
+    kind: Pod
+  assert:
+    - path: "$.spec.containers[*].resources.limits.cpu"
+      not_matches: "^$"
+    - path: "$.spec.containers[*].resources.limits.memory"
+      not_matches: "^$"
+  remediation: "Define CPU/Memory limits for every container."
