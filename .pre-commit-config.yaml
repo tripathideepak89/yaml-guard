@@ -5,12 +5,12 @@ repos:
         name: YAML Guard (K8s)
         entry: yamlguard --rules policies/k8s/core.yaml
         language: system
-        files: "\.ya?ml$"
+        files: '\\.ya?ml$'     # ✅ single quotes; backslash is literal
         pass_filenames: true
 
       - id: yamlguard-secrets
         name: YAML Guard (Secrets)
         entry: yamlguard --rules policies/security/secrets.yaml
         language: system
-        files: "\.ya?ml$"
+        files: '\\.ya?ml$'     # ✅ single quotes; backslash is literal
         pass_filenames: true
