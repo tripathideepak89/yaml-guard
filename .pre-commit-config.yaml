@@ -1,0 +1,16 @@
+repos:
+  - repo: local
+    hooks:
+      - id: yamlguard-k8s
+        name: YAML Guard (K8s)
+        entry: yamlguard --rules policies/k8s/core.yaml
+        language: system
+        files: "\.ya?ml$"
+        pass_filenames: true
+
+      - id: yamlguard-secrets
+        name: YAML Guard (Secrets)
+        entry: yamlguard --rules policies/security/secrets.yaml
+        language: system
+        files: "\.ya?ml$"
+        pass_filenames: true

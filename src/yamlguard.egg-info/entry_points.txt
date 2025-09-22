@@ -1,0 +1,2 @@
+[console_scripts]
+yamlguard = yamlguard.cli.main:main

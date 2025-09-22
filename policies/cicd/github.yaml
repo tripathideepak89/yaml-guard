@@ -1,0 +1,19 @@
+# Hardening for GitHub Actions workflows
+
+- id: GH-ACTIONS-PIN-BY-COMMIT
+  severity: high
+  when: {}
+  assert:
+    - path: $.jobs.*.steps[*].uses
+      not_matches: '^.*@(main|master|latest)$'
+    - path: $.jobs.*.steps[*].uses
+      must_include: '@'
+  remediation: "Pin actions by immutable commit SHA (e.g., actions/checkout@<40-hex>)."
+
+- id: GH-ACTIONS-NO-PAT-LEAK
+  severity: high
+  when: {}
+  assert:
+    - path: $.jobs.*.steps[*].env.*
+      not_matches: '\bghp_[A-Za-z0-9]{36}\b'
+  remediation: "Use secrets.GITHUB_TOKEN or repo/org secrets; never hardcode tokens."
