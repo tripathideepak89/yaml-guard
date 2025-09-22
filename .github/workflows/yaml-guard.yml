@@ -1,17 +1,40 @@
 name: YAML Guard
+
 on:
   pull_request:
     paths:
       - '**/*.yml'
       - '**/*.yaml'
+      - '.pre-commit-config.yaml'
   push:
     branches: [ main ]
     paths:
       - '**/*.yml'
       - '**/*.yaml'
+      - '.pre-commit-config.yaml'
 
 jobs:
+  precommit:
+    name: Pre-commit (YAML Guard hooks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install project + pre-commit
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install pre-commit
+      - name: Run pre-commit on all files
+        run: |
+          pre-commit run --all-files
+
   guard:
+    name: YAML Guard (CLI)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
