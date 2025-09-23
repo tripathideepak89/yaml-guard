@@ -54,58 +54,54 @@ jobs:
 
       # Run YAML Guard twice (K8s + Secrets), capture JSON, and merge
       - name: Run YAML Guard and collect findings
+        id: collect
         run: |
-            set -e
-            python - <<'PY'
-            import json, subprocess, sys
-            def run(cmd):
-                p = subprocess.run(cmd, text=True, capture_output=True)
-                print(p.stdout)
-                if p.returncode not in (0,1,2):
-                    raise SystemExit(p.returncode)
-                return json.loads(p.stdout or '{"ok":true,"findings":[]}')
+          set -e
+          python - <<'PY'
+          import json, glob, yaml as pyyaml
+          from yamlguard.core.loader import load_yaml
+          from yamlguard.core.rules import apply_rules
+          from yamlguard.core.recommend import suggest_for_file
 
-            a = run(["yamlguard","**/*.y*ml","--rules","policies/k8s/core.yaml"])
-            b = run(["yamlguard","**/*.y*ml","--rules","policies/security/secrets.yaml"])
-            findings = (a.get("findings", []) + b.get("findings", []))
+          # Load rules
+          k8s = pyyaml.safe_load(open("policies/k8s/core.yaml", encoding="utf-8")) or []
+          sec = pyyaml.safe_load(open("policies/security/secrets.yaml", encoding="utf-8")) or []
+          all_rules = k8s + sec
 
-            # Suggestions: call API-like logic by invoking yamlguard with --suggest to print diffs,
-            # but we’ll create suggestions via a tiny inline Python using recommend.suggest_for_finding
-            from yamlguard.core.loader import load_yaml
-            from yamlguard.core.recommend import suggest_for_finding
-            import glob, pathlib
+          findings = []
+          suggestions = []
 
-            suggestions = []
-            paths = glob.glob("**/*.y*ml", recursive=True)
-            # Load rules as JSON
-            import yaml as pyyaml
-            k8s_rules = pyyaml.safe_load(open("policies/k8s/core.yaml", "r", encoding="utf-8"))
-            sec_rules = pyyaml.safe_load(open("policies/security/secrets.yaml", "r", encoding="utf-8"))
-            all_rules = (k8s_rules or []) + (sec_rules or [])
+          for path in glob.glob("**/*.y*ml", recursive=True):
+              try:
+                  text = open(path, encoding="utf-8").read()
+                  doc = load_yaml(text)
+              except Exception:
+                  continue
 
-            for p in paths:
-                try:
-                    txt = open(p,"r",encoding="utf-8").read()
-                    doc = load_yaml(txt)
-                except Exception:
-                    continue
-                # recompute findings per file
-                from yamlguard.core.rules import apply_rules
-                fs = apply_rules(doc, all_rules)
-                for x in fs:
-                    s = suggest_for_finding(p, x, txt)
-                    if s:
-                        suggestions.append({
-                            "file": p,
-                            "title": s.title,
-                            "rationale": s.rationale,
-                            "diff": s.diff,
-                            "confidence": s.confidence
-                        })
+              fs = apply_rules(doc, all_rules)
+              for f in fs:
+                  f["file"] = path
+              findings.extend(fs)
 
-            with open("findings.json","w",encoding="utf-8") as f:
-                json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
-            PY
+              combo = suggest_for_file(path, fs, text)
+              if combo:
+                  suggestions.append({
+                      "file": path,
+                      "title": combo.title,
+                      "rationale": combo.rationale,
+                      "diff": combo.diff,
+                      "confidence": combo.confidence
+                  })
+
+          with open("findings.json","w",encoding="utf-8") as f:
+              json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
+
+          # Outputs for later steps
+          if findings:
+              open("${GITHUB_OUTPUT}","a").write("has_findings=true\n")
+          if suggestions:
+              open("${GITHUB_OUTPUT}","a").write("has_suggestions=true\n")
+          PY
 
 
       # Emit GitHub Annotations + Step Summary, and expose an output if findings exist
@@ -160,38 +156,40 @@ jobs:
 
       # Post a PR comment with a readable, condensed report
       - name: Comment on PR
-        if: github.event_name == 'pull_request' && steps.annotate.outputs.has_findings == 'true'
+        if: github.event_name == 'pull_request' && steps.collect.outputs.has_suggestions == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const data = JSON.parse(fs.readFileSync('findings.json','utf8'));
-            const fins = data.findings || [];
-            if (fins.length === 0) {
-              core.info('No findings; skipping PR comment.');
-              return;
-            }
-            const capped = fins.slice(0, 50); // keep comments tidy
+            const sugs = data.suggestions || [];
+            if (!sugs.length) { core.info('No suggestions.'); return; }
+
             const lines = [];
-            lines.push(`### YAML Guard found **${fins.length}** issue(s) ❌`);
+            lines.push(`### YAML Guard — suggested patches 💡`);
+            lines.push(`Combined, ready-to-apply diffs per file (replace placeholder digests before merging).`);
             lines.push('');
-            for (const x of capped) {
-              const sev = (x.severity || '').toUpperCase();
-              const rid = x.rule_id || '';
-              const msg = x.message || '';
-              let loc = x.file || '';
-              if (x.line) loc += `:${x.line}`;
-              lines.push(`- **${sev}** \`${rid}\` — ${msg}`);
-              if (loc) lines.push(`  \n  \`${loc}\``);
-              if (x.snippet) lines.push(`\n  \n\`\`\`yaml\n${x.snippet}\n\`\`\``);
+
+            const capped = sugs.slice(0, 10);
+            for (const s of capped) {
+              lines.push(`**${s.title}** — ${s.rationale} _(confidence: ${Math.round((s.confidence||0)*100)}%)_`);
+              lines.push(`\n\`\`\`diff\n${s.diff}\n\`\`\``);
             }
-            if (fins.length > 50) lines.push(`\n… and **${fins.length - 50}** more.`);
+            if (sugs.length > 10) lines.push(`\n… and **${sugs.length - 10}** more.`);
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
               body: lines.join('\n')
             });
+
+      - name: Upload findings/suggestions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yaml-guard-findings
+          path: findings.json
 
       # Finally: fail the job if there are findings
       - name: Fail if findings exist
