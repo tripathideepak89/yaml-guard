@@ -184,6 +184,14 @@ jobs:
               body: lines.join('\n')
             });
 
+      - name: Run K8s policy checks
+        run: |
+            yamlguard "k8s/**/**/*.y*ml" "manifests/**/*.y*ml" --rules policies/k8s/core.yaml || true
+
+      - name: Run secret detection (all YAML)
+        run: |
+            yamlguard "**/*.y*ml" --rules policies/security/secrets.yaml || true
+
       - name: Upload findings/suggestions
         if: always()
         uses: actions/upload-artifact@v4
