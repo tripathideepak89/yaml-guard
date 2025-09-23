@@ -9,7 +9,7 @@ from yamlguard.core.loader import load_yaml, dump_yaml
 from yamlguard.core.rules import apply_rules
 from yamlguard.core.optimize import canonicalize
 from yamlguard.core.locate import guess_location  # add import
-from yamlguard.core.recommend import suggest_for_finding
+from yamlguard.core.recommend import suggest_for_finding, suggest_for_file
 
 
 try:
@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--optimize", action="store_true", help="Write canonicalized YAML back to files")
     ap.add_argument("--suggest", action="store_true", help="Print suggested fixes (diffs)")
     ap.add_argument("--autofix", action="store_true", help="Apply safe fixes to files")
-    
+    ap.add_argument("--combine", action="store_true", help="Combine multiple suggestions into one patch per file")
     args = ap.parse_args()
 
     rules = _load_rules(args.rules)
@@ -60,20 +60,24 @@ def main():
                 x["line"] = ln
             if snip:
                 x["snippet"] = snip
-        if args.suggest or args.autofix:
-            sug = []
-            for x in fs:
-                s = suggest_for_finding(p, x, text)
+        if args.suggest or args.autofix or args.combine:
+            if args.combine:
+                s = suggest_for_file(p, fs, text)
                 if s:
-                    sug.append(s)
-                    if args.suggest:
+                    if args.suggest or args.combine:
                         print(s.diff)
-            if args.autofix and sug:
-                # apply the last suggestion’s patched_text (simple strategy)
-                # or, better: re-parse and apply by rule type one by one.
-                text_new = sug[-1].patched_text
-                with open(p, "w", encoding="utf-8") as out:
-                    out.write(text_new)
+                    if args.autofix:
+                        with open(p, "w", encoding="utf-8") as out:
+                            out.write(s.patched_text)
+            else:
+                for x in fs:
+                    s = suggest_for_finding(p, x, text)
+                    if s:
+                        if args.suggest:
+                            print(s.diff)
+                        if args.autofix:
+                            with open(p, "w", encoding="utf-8") as out:
+                                out.write(s.patched_text)
 
         findings.extend(fs)
 

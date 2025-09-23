@@ -13,6 +13,7 @@ src/yamlguard/core/jsonpath.py
 src/yamlguard/core/loader.py
 src/yamlguard/core/locate.py
 src/yamlguard/core/optimize.py
+src/yamlguard/core/recommend.py
 src/yamlguard/core/rules.py
 src/yamlguard/server/main.py
 tests/test_rules.py

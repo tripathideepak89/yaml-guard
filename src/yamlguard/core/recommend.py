@@ -138,33 +138,35 @@ def suggest_for_finding(path: str, finding: Dict[str, Any], original_text: str) 
 def suggest_for_file(path: str, findings: list[dict], original_text: str) -> Optional[Suggestion]:
     """
     Apply multiple rule-specific suggestions in sequence to produce one combined patch.
-    Order matters: tag pin first, then digest, then resources, then secret masking.
+    Order: tag pin -> digest -> resources -> secret masking.
     """
-    order = ["K8S-NO-LATEST-TAG", "NO_LATEST", "K8S-IMAGE-PIN-DIGEST",
-             "K8S-RESOURCES-LIMITS-PRESENT"]
-    # bring secrets last (text masking)
-    ordered = sorted(findings, key=lambda f: (order.index(f["rule_id"]) if f.get("rule_id") in order else 999,
-                                              1 if f.get("rule_id","").startswith("SECRET-") else 0))
-    current = original_text
-    changed_any = False
-    rationales, titles = [], []
-    conf = 0.0
+    order = ["K8S-NO-LATEST-TAG", "NO_LATEST", "K8S-IMAGE-PIN-DIGEST", "K8S-RESOURCES-LIMITS-PRESENT"]
+    # secrets last
+    def order_key(f):
+        rid = f.get("rule_id", "")
+        base = order.index(rid) if rid in order else 999
+        sec_bias = 1 if rid.startswith("SECRET-") else 0
+        return (base, sec_bias)
 
-    for f in ordered:
+    current = original_text
+    changed = False
+    rationales, titles = [], []
+    confidence = 0.0
+
+    for f in sorted(findings, key=order_key):
         s = suggest_for_finding(path, f, current)
         if s and s.patched_text != current:
             current = s.patched_text
-            changed_any = True
+            changed = True
             rationales.append(s.rationale)
             titles.append(s.title)
-            conf = max(conf, s.confidence)
+            confidence = max(confidence, s.confidence)
 
-    if not changed_any:
+    if not changed:
         return None
 
     diff = _unified_diff(original_text, current, path)
-    title = "Apply recommended hardening (pin tags/digests, add limits, mask secrets)"
-    rationale = " ".join(dict.fromkeys(rationales))  # de-duplicate in order
-    return Suggestion(title, rationale, current, diff, conf if conf else 0.7)
+    title = "Apply recommended hardening (pin tag + digest, add limits, mask secrets)"
+    rationale = " ".join(dict.fromkeys(rationales))  # de-duplicate
+    return Suggestion(title, rationale, current, diff, confidence if confidence else 0.7)
 
-    return None

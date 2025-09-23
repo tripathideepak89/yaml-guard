@@ -99,11 +99,25 @@ def validate(req: ValidateReq):
 
 @app.post("/v1/suggest", response_model=SuggestResp, summary="Suggest fixes for YAML findings")
 def suggest(req: SuggestReq):
-    suggestions: List[SuggestionOut] = []
+    suggestions: list[SuggestionOut] = []
     rules = req.rules or []
     for f in req.files:
         doc = load_yaml(f.content)
         fs = apply_rules(doc, rules)
+
+        # Try combined patch per file
+        combo = suggest_for_file(f.path, fs, f.content)
+        if combo:
+            suggestions.append(SuggestionOut(
+                file=f.path,
+                title=combo.title,
+                rationale=combo.rationale,
+                diff=combo.diff,
+                confidence=combo.confidence
+            ))
+            continue
+
+        # Fallback to individual suggestions
         for x in fs:
             s = suggest_for_finding(f.path, x, f.content)
             if s:
@@ -116,31 +130,3 @@ def suggest(req: SuggestReq):
                 ))
     return SuggestResp(suggestions=suggestions)
 
-
-@app.post("/v1/suggest", response_model=SuggestResp, summary="Suggest fixes for YAML findings")
-def suggest(req: SuggestReq):
-    suggestions: list[SuggestionOut] = []
-    rules = req.rules or []
-    for f in req.files:
-        # evaluate findings for this file
-        doc = load_yaml(f.content)
-        fs = apply_rules(doc, rules)
-
-        # Try a combined suggestion first
-        combo = suggest_for_file(f.path, fs, f.content)
-        if combo:
-            suggestions.append(SuggestionOut(
-                file=f.path, title=combo.title, rationale=combo.rationale,
-                diff=combo.diff, confidence=combo.confidence
-            ))
-            continue
-
-        # fallback: individual suggestions (if combo not possible)
-        for x in fs:
-            s = suggest_for_finding(f.path, x, f.content)
-            if s:
-                suggestions.append(SuggestionOut(
-                    file=f.path, title=s.title, rationale=s.rationale,
-                    diff=s.diff, confidence=s.confidence
-                ))
-    return SuggestResp(suggestions=suggestions)
