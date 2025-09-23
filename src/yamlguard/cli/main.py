@@ -9,6 +9,7 @@ from yamlguard.core.loader import load_yaml, dump_yaml
 from yamlguard.core.rules import apply_rules
 from yamlguard.core.optimize import canonicalize
 from yamlguard.core.locate import guess_location  # add import
+from yamlguard.core.recommend import suggest_for_finding
 
 
 try:
@@ -39,6 +40,9 @@ def main():
     ap.add_argument("paths", nargs="+", help="Files or globs to validate")
     ap.add_argument("--rules", help="Rules YAML file (list)")
     ap.add_argument("--optimize", action="store_true", help="Write canonicalized YAML back to files")
+    ap.add_argument("--suggest", action="store_true", help="Print suggested fixes (diffs)")
+    ap.add_argument("--autofix", action="store_true", help="Apply safe fixes to files")
+    
     args = ap.parse_args()
 
     rules = _load_rules(args.rules)
@@ -56,6 +60,21 @@ def main():
                 x["line"] = ln
             if snip:
                 x["snippet"] = snip
+        if args.suggest or args.autofix:
+            sug = []
+            for x in fs:
+                s = suggest_for_finding(p, x, text)
+                if s:
+                    sug.append(s)
+                    if args.suggest:
+                        print(s.diff)
+            if args.autofix and sug:
+                # apply the last suggestion’s patched_text (simple strategy)
+                # or, better: re-parse and apply by rule type one by one.
+                text_new = sug[-1].patched_text
+                with open(p, "w", encoding="utf-8") as out:
+                    out.write(text_new)
+
         findings.extend(fs)
 
 

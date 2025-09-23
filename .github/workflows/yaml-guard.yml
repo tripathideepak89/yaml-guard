@@ -55,24 +55,58 @@ jobs:
       # Run YAML Guard twice (K8s + Secrets), capture JSON, and merge
       - name: Run YAML Guard and collect findings
         run: |
-          set -e
-          python - <<'PY'
-          import json, subprocess
+            set -e
+            python - <<'PY'
+            import json, subprocess, sys
+            def run(cmd):
+                p = subprocess.run(cmd, text=True, capture_output=True)
+                print(p.stdout)
+                if p.returncode not in (0,1,2):
+                    raise SystemExit(p.returncode)
+                return json.loads(p.stdout or '{"ok":true,"findings":[]}')
 
-          def run(cmd):
-              p = subprocess.run(cmd, text=True, capture_output=True)
-              print(p.stdout)               # keep CLI output
-              if p.returncode not in (0,1,2):  # our CLI exits 1 on findings, 2 on parse errs
-                  raise SystemExit(p.returncode)
-              return json.loads(p.stdout or '{"ok":true,"findings":[]}')
+            a = run(["yamlguard","**/*.y*ml","--rules","policies/k8s/core.yaml"])
+            b = run(["yamlguard","**/*.y*ml","--rules","policies/security/secrets.yaml"])
+            findings = (a.get("findings", []) + b.get("findings", []))
 
-          a = run(["yamlguard","**/*.y*ml","--rules","policies/k8s/core.yaml"])
-          b = run(["yamlguard","**/*.y*ml","--rules","policies/security/secrets.yaml"])
+            # Suggestions: call API-like logic by invoking yamlguard with --suggest to print diffs,
+            # but we’ll create suggestions via a tiny inline Python using recommend.suggest_for_finding
+            from yamlguard.core.loader import load_yaml
+            from yamlguard.core.recommend import suggest_for_finding
+            import glob, pathlib
 
-          findings = (a.get("findings", []) + b.get("findings", []))
-          with open("findings.json","w",encoding="utf-8") as f:
-              json.dump({"findings": findings}, f, ensure_ascii=False)
-          PY
+            suggestions = []
+            paths = glob.glob("**/*.y*ml", recursive=True)
+            # Load rules as JSON
+            import yaml as pyyaml
+            k8s_rules = pyyaml.safe_load(open("policies/k8s/core.yaml", "r", encoding="utf-8"))
+            sec_rules = pyyaml.safe_load(open("policies/security/secrets.yaml", "r", encoding="utf-8"))
+            all_rules = (k8s_rules or []) + (sec_rules or [])
+
+            for p in paths:
+                try:
+                    txt = open(p,"r",encoding="utf-8").read()
+                    doc = load_yaml(txt)
+                except Exception:
+                    continue
+                # recompute findings per file
+                from yamlguard.core.rules import apply_rules
+                fs = apply_rules(doc, all_rules)
+                for x in fs:
+                    s = suggest_for_finding(p, x, txt)
+                    if s:
+                        suggestions.append({
+                            "file": p,
+                            "title": s.title,
+                            "rationale": s.rationale,
+                            "diff": s.diff,
+                            "confidence": s.confidence
+                        })
+
+            with open("findings.json","w",encoding="utf-8") as f:
+                json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
+            PY
+
 
       # Emit GitHub Annotations + Step Summary, and expose an output if findings exist
       - name: Annotate & summarize

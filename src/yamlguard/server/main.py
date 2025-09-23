@@ -7,6 +7,9 @@ from yamlguard.core.loader import load_yaml, dump_yaml
 from yamlguard.core.optimize import canonicalize
 from yamlguard.core.rules import apply_rules
 from yamlguard.core.locate import guess_location
+from yamlguard.core.recommend import suggest_for_finding, Suggestion
+from collections import defaultdict
+from yamlguard.core.recommend import suggest_for_finding, suggest_for_file, Suggestion
 
 app = FastAPI(title="YAML Guard (Local)")
 
@@ -46,6 +49,19 @@ class ValidateResp(BaseModel):
     findings: List[AssertionFinding]
     optimized: List[OptimizedFile] = []
 
+class SuggestionOut(BaseModel):
+    file: str
+    title: str
+    rationale: str
+    diff: str
+    confidence: float
+
+class SuggestReq(ValidateReq):
+    pass
+
+class SuggestResp(BaseModel):
+    suggestions: List[SuggestionOut] = []
+
 # ---- Routes ----
 
 @app.get("/health")
@@ -80,3 +96,51 @@ def validate(req: ValidateReq):
             optimized.append(OptimizedFile(path=f.path, content=dump_yaml(opt)))
 
     return ValidateResp(ok=(len(findings) == 0), findings=findings, optimized=optimized)
+
+@app.post("/v1/suggest", response_model=SuggestResp, summary="Suggest fixes for YAML findings")
+def suggest(req: SuggestReq):
+    suggestions: List[SuggestionOut] = []
+    rules = req.rules or []
+    for f in req.files:
+        doc = load_yaml(f.content)
+        fs = apply_rules(doc, rules)
+        for x in fs:
+            s = suggest_for_finding(f.path, x, f.content)
+            if s:
+                suggestions.append(SuggestionOut(
+                    file=f.path,
+                    title=s.title,
+                    rationale=s.rationale,
+                    diff=s.diff,
+                    confidence=s.confidence
+                ))
+    return SuggestResp(suggestions=suggestions)
+
+
+@app.post("/v1/suggest", response_model=SuggestResp, summary="Suggest fixes for YAML findings")
+def suggest(req: SuggestReq):
+    suggestions: list[SuggestionOut] = []
+    rules = req.rules or []
+    for f in req.files:
+        # evaluate findings for this file
+        doc = load_yaml(f.content)
+        fs = apply_rules(doc, rules)
+
+        # Try a combined suggestion first
+        combo = suggest_for_file(f.path, fs, f.content)
+        if combo:
+            suggestions.append(SuggestionOut(
+                file=f.path, title=combo.title, rationale=combo.rationale,
+                diff=combo.diff, confidence=combo.confidence
+            ))
+            continue
+
+        # fallback: individual suggestions (if combo not possible)
+        for x in fs:
+            s = suggest_for_finding(f.path, x, f.content)
+            if s:
+                suggestions.append(SuggestionOut(
+                    file=f.path, title=s.title, rationale=s.rationale,
+                    diff=s.diff, confidence=s.confidence
+                ))
+    return SuggestResp(suggestions=suggestions)
