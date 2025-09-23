@@ -8,6 +8,8 @@ import sys
 from yamlguard.core.loader import load_yaml, dump_yaml
 from yamlguard.core.rules import apply_rules
 from yamlguard.core.optimize import canonicalize
+from yamlguard.core.locate import guess_location  # add import
+
 
 try:
     import yaml as pyyaml
@@ -44,15 +46,18 @@ def main():
     findings = []
     for p in _expand(args.paths):
         with open(p, "r", encoding="utf-8") as fh:
-            doc = load_yaml(fh.read())
+            text = fh.read()
+        doc = load_yaml(text)
         fs = apply_rules(doc, rules)
         for x in fs:
             x["file"] = p
+            ln, snip = guess_location(text, x.get("path",""), x.get("values", []))
+            if ln is not None:
+                x["line"] = ln
+            if snip:
+                x["snippet"] = snip
         findings.extend(fs)
-        if args.optimize:
-            opt = canonicalize(doc)
-            with open(p, "w", encoding="utf-8") as out:
-                out.write(dump_yaml(opt))
+
 
     print(json.dumps({"ok": len(findings) == 0, "findings": findings}, indent=2))
     sys.exit(1 if findings else 0)

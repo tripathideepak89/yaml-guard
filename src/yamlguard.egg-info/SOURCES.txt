@@ -11,6 +11,7 @@ src/yamlguard/cli/main.py
 src/yamlguard/core/__init__.py
 src/yamlguard/core/jsonpath.py
 src/yamlguard/core/loader.py
+src/yamlguard/core/locate.py
 src/yamlguard/core/optimize.py
 src/yamlguard/core/rules.py
 src/yamlguard/server/main.py
