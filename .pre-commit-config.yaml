@@ -1,3 +1,4 @@
+# .pre-commit-config.yaml
 repos:
   - repo: local
     hooks:
@@ -5,12 +6,13 @@ repos:
         name: YAML Guard (K8s)
         entry: yamlguard --rules policies/k8s/core.yaml
         language: system
-        files: '\\.ya?ml$'     # ✅ single quotes; backslash is literal
+        files: '\.ya?ml$'
         pass_filenames: true
 
       - id: yamlguard-secrets
         name: YAML Guard (Secrets)
         entry: yamlguard --rules policies/security/secrets.yaml
         language: system
-        files: '\\.ya?ml$'     # ✅ single quotes; backslash is literal
+        files: '\.ya?ml$'
+        exclude: '^policies/.*$'   # ← exclude policy files from secret scan
         pass_filenames: true

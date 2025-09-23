@@ -53,55 +53,60 @@ jobs:
           pip install -e .[dev]
 
       # Run YAML Guard twice (K8s + Secrets), capture JSON, and merge
-      - name: Run YAML Guard and collect findings
+      - name: Run YAML Guard and build combined suggestions
         id: collect
         run: |
-          set -e
-          python - <<'PY'
-          import json, glob, yaml as pyyaml
-          from yamlguard.core.loader import load_yaml
-          from yamlguard.core.rules import apply_rules
-          from yamlguard.core.recommend import suggest_for_file
+            set -e
+            python - <<'PY'
+            import json, glob, yaml as pyyaml, os
+            from yamlguard.core.loader import load_yaml
+            from yamlguard.core.rules import apply_rules
+            from yamlguard.core.recommend import suggest_for_file
 
-          # Load rules
-          k8s = pyyaml.safe_load(open("policies/k8s/core.yaml", encoding="utf-8")) or []
-          sec = pyyaml.safe_load(open("policies/security/secrets.yaml", encoding="utf-8")) or []
-          all_rules = k8s + sec
+            # Load rules
+            k8s = pyyaml.safe_load(open("policies/k8s/core.yaml", encoding="utf-8")) or []
+            sec = pyyaml.safe_load(open("policies/security/secrets.yaml", encoding="utf-8")) or []
+            all_rules = k8s + sec
 
-          findings = []
-          suggestions = []
+            def wanted(path: str) -> bool:
+            # exclude policy files themselves to avoid self-flagging
+            return not (path.startswith("policies/") or "/policies/" in path)
 
-          for path in glob.glob("**/*.y*ml", recursive=True):
-              try:
-                  text = open(path, encoding="utf-8").read()
-                  doc = load_yaml(text)
-              except Exception:
-                  continue
+            # collect YAML files excluding policies/**
+            paths = [p for p in glob.glob("**/*.y*ml", recursive=True) if wanted(p)]
 
-              fs = apply_rules(doc, all_rules)
-              for f in fs:
-                  f["file"] = path
-              findings.extend(fs)
+            findings, suggestions = [], []
 
-              combo = suggest_for_file(path, fs, text)
-              if combo:
-                  suggestions.append({
-                      "file": path,
-                      "title": combo.title,
-                      "rationale": combo.rationale,
-                      "diff": combo.diff,
-                      "confidence": combo.confidence
-                  })
+            for path in paths:
+                try:
+                    text = open(path, encoding="utf-8").read()
+                    doc = load_yaml(text)
+                except Exception:
+                    continue
 
-          with open("findings.json","w",encoding="utf-8") as f:
-              json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
+                fs = apply_rules(doc, all_rules)
+                for f in fs:
+                    f["file"] = path
+                findings.extend(fs)
 
-          # Outputs for later steps
-          if findings:
-              open("${GITHUB_OUTPUT}","a").write("has_findings=true\n")
-          if suggestions:
-              open("${GITHUB_OUTPUT}","a").write("has_suggestions=true\n")
-          PY
+                combo = suggest_for_file(path, fs, text)
+                if combo:
+                    suggestions.append({
+                        "file": path,
+                        "title": combo.title,
+                        "rationale": combo.rationale,
+                        "diff": combo.diff,
+                        "confidence": combo.confidence
+                    })
+
+            with open("findings.json","w",encoding="utf-8") as f:
+                json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
+
+            if findings:
+                open("${GITHUB_OUTPUT}","a").write("has_findings=true\n")
+            if suggestions:
+                open("${GITHUB_OUTPUT}","a").write("has_suggestions=true\n")
+            PY
 
 
       # Emit GitHub Annotations + Step Summary, and expose an output if findings exist
