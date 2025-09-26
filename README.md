@@ -135,3 +135,102 @@ Suggest: suggestions=1
 ```
 
 This aggregates all policy rules (either client-side or via omission on the API) and exercises `/v1/validate` and `/v1/suggest`.
+
+## Containerized Usage
+
+You can build and run a container that bundles the FastAPI backend and the compiled React UI (served at `/ui`).
+
+### Build Image
+
+```bash
+docker build -t yamlguard:latest .
+```
+
+Override the baked-in API base for the UI (default `http://localhost:8000`) during build:
+
+```bash
+docker build --build-arg VITE_API_BASE=http://localhost:8000 -t yamlguard:latest .
+```
+
+### Run Container
+
+```bash
+docker run --rm -p 8000:8000 yamlguard:latest
+```
+
+Open:
+- API: http://127.0.0.1:8000/v1/policies
+- UI:  http://127.0.0.1:8000/ui/
+
+The container includes all policy files under `policies/**` and examples under `examples/`.
+
+### docker-compose (Recommended for Dev + Tests)
+
+Bring up the API (and UI) with:
+
+```bash
+docker compose up --build
+```
+
+Run tests in an isolated stage:
+
+```bash
+docker compose --profile test up --build --abort-on-container-exit --exit-code-from tests
+```
+
+Or build and execute the test target directly:
+
+```bash
+docker build -t yamlguard-test --target test .
+docker run --rm yamlguard-test
+```
+
+### Hot-Reload UI Separately (Optional)
+
+If you want live UI development while the API runs in the container, enable the `dev` profile which launches a lightweight Node container mounting your local `ui/` directory:
+
+```bash
+docker compose --profile dev up api ui-dev
+```
+
+This keeps the Python API inside the image while Vite serves the UI with hot reload on your host at http://127.0.0.1:5173.
+
+### Passing Custom Policies
+
+Mount a host directory containing additional policies:
+
+```bash
+docker run --rm -p 8000:8000 -v "$(pwd)/policies:/app/policies:ro" yamlguard:latest
+```
+
+### Health Check
+
+The image includes a Docker healthcheck hitting `/health`. Compose will report the container as healthy once the FastAPI app is ready.
+
+### Smoke Test Against Running Container
+
+```bash
+python scripts/smoke_validate.py --host http://127.0.0.1:8000
+```
+
+Or from another container (after compose up):
+
+```bash
+docker compose exec api python scripts/smoke_validate.py --host http://127.0.0.1:8000
+```
+
+### Suggested Workflow
+
+1. Iterate locally (Python / UI) as before.
+2. Build image to ensure reproducibility.
+3. Run test target (or compose test profile) in CI to guarantee production parity.
+4. Ship the single image (contains both API + static UI) to your registry.
+
+### Image Size Optimization (Future)
+
+Potential optimizations not yet applied:
+* Use `--only=production` or `pnpm` for faster UI install.
+* Multi-stage with a wheel build + slim runtime copying only wheels.
+* Distroless / Python base trimming once dependencies stabilized.
+
+Contributions welcome!
