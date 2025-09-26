@@ -13,16 +13,17 @@ It will:
 Exit code is non‑zero if a request fails (network or non-2xx) but it does
 NOT fail if findings exist (so it can be used in CI to just exercise paths).
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List
 
 import ruamel.yaml
-import urllib.request
 
 yaml = ruamel.yaml.YAML(typ="safe")
 
@@ -69,6 +70,7 @@ def post_json(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def summarize_findings(findings: List[Dict[str, Any]]) -> str:
     from collections import Counter
+
     c = Counter(f.get("severity", "unknown") for f in findings)
     parts = [f"{sev}:{cnt}" for sev, cnt in sorted(c.items(), key=lambda x: x[0])]
     return ", ".join(parts) if parts else "none"
@@ -76,7 +78,11 @@ def summarize_findings(findings: List[Dict[str, Any]]) -> str:
 
 def main(argv: List[str]) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="http://127.0.0.1:8000", help="Base host:port for API (no trailing /v1)")
+    ap.add_argument(
+        "--host",
+        default="http://127.0.0.1:8000",
+        help="Base host:port for API (no trailing /v1)",
+    )
     args = ap.parse_args(argv)
 
     root = Path(__file__).resolve().parents[1]
@@ -104,7 +110,13 @@ def main(argv: List[str]) -> int:
     findings = vresp.get("findings", [])
     suggestions = sresp.get("suggestions", [])
 
-    print("Validate: ok=" + str(vresp.get("ok")) + f" findings={len(findings)} (" + summarize_findings(findings) + ")")
+    print(
+        "Validate: ok="
+        + str(vresp.get("ok"))
+        + f" findings={len(findings)} ("
+        + summarize_findings(findings)
+        + ")"
+    )
     print("Suggest: suggestions=" + str(len(suggestions)))
     if suggestions:
         first = suggestions[0]

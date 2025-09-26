@@ -2,7 +2,12 @@
 import re
 from typing import Optional
 
-def guess_location(yaml_text: str, jsonpath: str, values: list[str]) -> tuple[Optional[int], Optional[str]]:
+
+def guess_location(
+    yaml_text: str,
+    jsonpath: str,
+    values: list[str],
+) -> tuple[Optional[int], Optional[str]]:
     """
     Best-effort line locator:
     1) Try to infer the last key from the JSONPath (e.g., '$.spec.containers[*].image' -> 'image')
@@ -21,7 +26,12 @@ def guess_location(yaml_text: str, jsonpath: str, values: list[str]) -> tuple[Op
     for v in values or []:
         v_esc = re.escape(str(v))
         if key_hint:
-            patterns.append(re.compile(rf"^\s*{re.escape(key_hint)}\s*:\s*.*{v_esc}.*$", re.IGNORECASE))
+            patterns.append(
+                re.compile(
+                    rf"^\s*{re.escape(key_hint)}\s*:\s*.*{v_esc}.*$",
+                    re.IGNORECASE,
+                )
+            )
         # fallback: value only
         patterns.append(re.compile(rf".*{v_esc}.*"))
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
+
 import difflib
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
-from ruamel.yaml import YAML
-from io import StringIO
 import re
+from dataclasses import dataclass
+from io import StringIO
+from typing import Any, Dict, Optional
+
+from ruamel.yaml import YAML
 
 yaml = YAML(typ="safe")
 yaml.default_flow_style = False
+
 
 @dataclass
 class Suggestion:
@@ -17,6 +20,7 @@ class Suggestion:
     diff: str
     confidence: float  # 0..1
 
+
 def _dump(obj) -> str:
     sio = StringIO()
     y = YAML()
@@ -24,8 +28,10 @@ def _dump(obj) -> str:
     y.dump(obj, sio)
     return sio.getvalue()
 
+
 def _load(text: str) -> Any:
     return yaml.load(StringIO(text))
+
 
 def _unified_diff(before: str, after: str, path: str) -> str:
     return "".join(
@@ -38,10 +44,11 @@ def _unified_diff(before: str, after: str, path: str) -> str:
         )
     )
 
+
 def _update_at_key_scalar_text(text: str, key: str, replace: callable) -> str:
     # very targeted line-level replace: key: value lines only (keeps comments stable)
     lines = text.splitlines()
-    pat = re.compile(rf'^(\s*{re.escape(key)}\s*:\s*)(.+)$')
+    pat = re.compile(rf"^(\s*{re.escape(key)}\s*:\s*)(.+)$")
     out = []
     changed = False
     for ln in lines:
@@ -58,7 +65,10 @@ def _update_at_key_scalar_text(text: str, key: str, replace: callable) -> str:
             out.append(ln)
     return "\n".join(out) + ("\n" if text.endswith("\n") else ""), changed
 
-def suggest_for_finding(path: str, finding: Dict[str, Any], original_text: str) -> Optional[Suggestion]:
+
+def suggest_for_finding(
+    path: str, finding: Dict[str, Any], original_text: str
+) -> Optional[Suggestion]:
     rid = finding.get("rule_id", "")
     values = finding.get("values") or []
     title = rationale = ""
@@ -66,6 +76,7 @@ def suggest_for_finding(path: str, finding: Dict[str, Any], original_text: str) 
 
     # 1) K8S-NO-LATEST-TAG: replace ":latest" with a stable placeholder tag
     if rid in ("K8S-NO-LATEST-TAG", "NO_LATEST"):
+
         def repl(v: str) -> str:
             new = re.sub(r":latest(\b|$)", ":1.0", v)
             if "@sha256:" not in new:
@@ -79,17 +90,22 @@ def suggest_for_finding(path: str, finding: Dict[str, Any], original_text: str) 
             changed = patched2 != patched
         if changed:
             title = "Pin image tag (avoid :latest)"
-            rationale = "Floating tags break reproducibility. Replace ':latest' with a pinned version; ideally also add a digest."
+            rationale = (
+                "Floating tags break reproducibility. Replace ':latest' with a pinned "
+                "version; ideally also add a digest."
+            )
             patched = patched2
             diff = _unified_diff(original_text, patched, path)
             return Suggestion(title, rationale, patched, diff, 0.75)
 
     # 2) K8S-IMAGE-PIN-DIGEST: append a digest placeholder if missing
     if rid in ("K8S-IMAGE-PIN-DIGEST",):
+
         def repl(v: str) -> str:
             if "@sha256:" in v:
                 return v
             return f"{v}@sha256:REPLACE_WITH_REAL_DIGEST"
+
         patched2, changed = _update_at_key_scalar_text(patched, "image", repl)
         if changed:
             title = "Pin image by digest"
@@ -102,18 +118,22 @@ def suggest_for_finding(path: str, finding: Dict[str, Any], original_text: str) 
     if rid in ("K8S-RESOURCES-LIMITS-PRESENT",):
         try:
             doc = _load(patched)
-            containers = (((doc or {}).get("spec") or {}).get("containers") or [])
+            containers = ((doc or {}).get("spec") or {}).get("containers") or []
             changed = False
             for c in containers:
                 res = c.setdefault("resources", {})
                 lim = res.setdefault("limits", {})
-                if "cpu" not in lim: lim["cpu"] = "100m"
-                if "memory" not in lim: lim["memory"] = "128Mi"
+                if "cpu" not in lim:
+                    lim["cpu"] = "100m"
+                if "memory" not in lim:
+                    lim["memory"] = "128Mi"
                 changed = True
             if changed:
                 patched2 = _dump(doc)
                 title = "Add resource limits"
-                rationale = "Define CPU/Memory limits for each container to prevent noisy-neighbor issues."
+                rationale = (
+                    "Define CPU/Memory limits for each container to prevent noisy-neighbor issues."
+                )
                 diff = _unified_diff(patched, patched2, path)
                 return Suggestion(title, rationale, patched2, diff, 0.7)
         except Exception:
@@ -124,13 +144,17 @@ def suggest_for_finding(path: str, finding: Dict[str, Any], original_text: str) 
         # replace literal value with a placeholder and hint to use secret reference
         def repl(v: str) -> str:
             return "*****"
+
         # common keys are variable values, not fixed key names, so mask any matching literal
         patched2 = patched
         for v in values:
             patched2 = patched2.replace(str(v), "*****")
         if patched2 != patched:
             title = "Remove hardcoded secret"
-            rationale = "Delete hardcoded credentials and reference a secret (e.g., GitHub Actions `${{ secrets.MY_TOKEN }}` or K8s Secret)."
+            rationale = (
+                "Delete hardcoded credentials and reference a secret (e.g., GitHub Actions "
+                "`${{ secrets.MY_TOKEN }}` or K8s Secret)."
+            )
             diff = _unified_diff(patched, patched2, path)
             return Suggestion(title, rationale, patched2, diff, 0.9)
 
@@ -140,7 +164,13 @@ def suggest_for_file(path: str, findings: list[dict], original_text: str) -> Opt
     Apply multiple rule-specific suggestions in sequence to produce one combined patch.
     Order: tag pin -> digest -> resources -> secret masking.
     """
-    order = ["K8S-NO-LATEST-TAG", "NO_LATEST", "K8S-IMAGE-PIN-DIGEST", "K8S-RESOURCES-LIMITS-PRESENT"]
+    order = [
+        "K8S-NO-LATEST-TAG",
+        "NO_LATEST",
+        "K8S-IMAGE-PIN-DIGEST",
+        "K8S-RESOURCES-LIMITS-PRESENT",
+    ]
+
     # secrets last
     def order_key(f):
         rid = f.get("rule_id", "")
@@ -169,4 +199,3 @@ def suggest_for_file(path: str, findings: list[dict], original_text: str) -> Opt
     title = "Apply recommended hardening (pin tag + digest, add limits, mask secrets)"
     rationale = " ".join(dict.fromkeys(rationales))  # de-duplicate
     return Suggestion(title, rationale, current, diff, confidence if confidence else 0.7)
-

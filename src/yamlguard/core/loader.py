@@ -1,7 +1,9 @@
-from ruamel.yaml import YAML
 from io import StringIO
 
+from ruamel.yaml import YAML
+
 yaml = YAML(typ="safe")
+
 
 def load_yaml(text: str):
     try:
@@ -11,7 +13,8 @@ def load_yaml(text: str):
             return None
         return docs if len(docs) > 1 else docs[0]
     except Exception as e:
-        raise ValueError(f"YAML_PARSE_ERROR: {e}")
+        raise ValueError(f"YAML_PARSE_ERROR: {e}") from e
+
 
 def dump_yaml(obj) -> str:
     sio = StringIO()

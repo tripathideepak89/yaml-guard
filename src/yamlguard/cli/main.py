@@ -5,12 +5,10 @@ import json
 import os
 import sys
 
-from yamlguard.core.loader import load_yaml, dump_yaml
-from yamlguard.core.rules import apply_rules
-from yamlguard.core.optimize import canonicalize
+from yamlguard.core.loader import load_yaml
 from yamlguard.core.locate import guess_location  # add import
-from yamlguard.core.recommend import suggest_for_finding, suggest_for_file
-
+from yamlguard.core.recommend import suggest_for_file, suggest_for_finding
+from yamlguard.core.rules import apply_rules
 
 try:
     import yaml as pyyaml
@@ -39,10 +37,18 @@ def main():
     ap = argparse.ArgumentParser("yamlguard")
     ap.add_argument("paths", nargs="+", help="Files or globs to validate")
     ap.add_argument("--rules", help="Rules YAML file (list)")
-    ap.add_argument("--optimize", action="store_true", help="Write canonicalized YAML back to files")
+    ap.add_argument(
+        "--optimize",
+        action="store_true",
+        help="Write canonicalized YAML back to files",
+    )
     ap.add_argument("--suggest", action="store_true", help="Print suggested fixes (diffs)")
     ap.add_argument("--autofix", action="store_true", help="Apply safe fixes to files")
-    ap.add_argument("--combine", action="store_true", help="Combine multiple suggestions into one patch per file")
+    ap.add_argument(
+        "--combine",
+        action="store_true",
+        help="Combine multiple suggestions into one patch per file",
+    )
     args = ap.parse_args()
 
     rules = _load_rules(args.rules)
@@ -55,7 +61,7 @@ def main():
         fs = apply_rules(doc, rules)
         for x in fs:
             x["file"] = p
-            ln, snip = guess_location(text, x.get("path",""), x.get("values", []))
+            ln, snip = guess_location(text, x.get("path", ""), x.get("values", []))
             if ln is not None:
                 x["line"] = ln
             if snip:
@@ -80,7 +86,6 @@ def main():
                                 out.write(s.patched_text)
 
         findings.extend(fs)
-
 
     print(json.dumps({"ok": len(findings) == 0, "findings": findings}, indent=2))
     sys.exit(1 if findings else 0)

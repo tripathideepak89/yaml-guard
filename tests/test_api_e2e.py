@@ -1,11 +1,11 @@
+import socket
 import threading
 import time
-import socket
 from contextlib import closing
 
 import httpx
-import uvicorn
 import pytest
+import uvicorn
 
 from yamlguard.server.main import app
 
@@ -22,7 +22,14 @@ class ServerThread(threading.Thread):
     def __init__(self, port: int):
         super().__init__(daemon=True)
         self.port = port
-        self._server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+        self._server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host="127.0.0.1",
+                port=port,
+                log_level="warning",
+            )
+        )
 
     def run(self):  # pragma: no cover (integration path)
         self._server.run()
@@ -49,15 +56,20 @@ def test_api_end_to_end():
         time.sleep(0.25)
     else:
         t.should_exit()
-        assert False, "Server did not become healthy in time"
+        raise AssertionError("Server did not become healthy in time")
 
     # Validate with autoload (omit rules)
-    pod_yaml = """apiVersion: v1\nkind: Pod\nmetadata:\n  name: bad-pod\nspec:\n  containers:\n    - name: web\n      image: nginx:latest\n"""
+    pod_yaml = (
+        "apiVersion: v1\nkind: Pod\nmetadata:\n  name: bad-pod\n"
+        "spec:\n  containers:\n    - name: web\n      image: nginx:latest\n"
+    )
     payload = {"files": [{"path": "pod-bad-inline.yaml", "content": pod_yaml}], "optimize": False}
     vresp = httpx.post(base + "/v1/validate", json=payload, timeout=5)
     assert vresp.status_code == 200
     findings = vresp.json().get("findings", [])
-    assert any(f.get("rule_id") == "K8S-NO-LATEST-TAG" for f in findings), "Expected latest tag finding"
+    assert any(f.get("rule_id") == "K8S-NO-LATEST-TAG" for f in findings), (
+        "Expected latest tag finding"
+    )
 
     # Suggest
     sresp = httpx.post(base + "/v1/suggest", json=payload, timeout=5)

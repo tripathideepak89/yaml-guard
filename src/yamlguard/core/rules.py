@@ -1,8 +1,10 @@
 import re
-from typing import List, Dict, Any, Iterable
+from typing import Any, Dict, Iterable, List
+
 from .jsonpath import match
 
 Finding = Dict[str, Any]
+
 
 def _iter_docs(doc: Any) -> Iterable[Any]:
     """Normalize input into a sequence of documents."""
@@ -11,6 +13,7 @@ def _iter_docs(doc: Any) -> Iterable[Any]:
     if isinstance(doc, list):
         return doc
     return [doc]
+
 
 def apply_rules(doc: Any, rules_yaml: List[dict]) -> List[Finding]:
     findings: List[Finding] = []
@@ -30,7 +33,14 @@ def apply_rules(doc: Any, rules_yaml: List[dict]) -> List[Finding]:
                     pat = re.compile(str(assertion["not_matches"]))
                     bad = [v for v in values if isinstance(v, str) and pat.search(v)]
                     if bad:
-                        findings.append(_finding(rule, path, f"Value matched forbidden pattern: {pat.pattern}", bad))
+                        findings.append(
+                            _finding(
+                                rule,
+                                path,
+                                f"Value matched forbidden pattern: {pat.pattern}",
+                                bad,
+                            )
+                        )
 
                 if "must_include" in assertion:
                     req = str(assertion["must_include"])
@@ -46,6 +56,7 @@ def apply_rules(doc: Any, rules_yaml: List[dict]) -> List[Finding]:
 
     return findings
 
+
 def _applies(rule: dict, unit: Any) -> bool:
     """Return True if the rule should run against this unit (doc or element)."""
     when = rule.get("when", {}) or {}
@@ -58,6 +69,7 @@ def _applies(rule: dict, unit: Any) -> bool:
         if unit.get("kind") != kind:
             return False
     return True
+
 
 def _finding(rule: dict, path: str, message: str, values: list) -> Finding:
     return {

@@ -16,6 +16,7 @@ src/yamlguard/core/optimize.py
 src/yamlguard/core/recommend.py
 src/yamlguard/core/rules.py
 src/yamlguard/server/main.py
+tests/test_api_e2e.py
 tests/test_autoload.py
 tests/test_rules.py
 tests/test_secrets.py
