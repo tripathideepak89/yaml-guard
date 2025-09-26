@@ -21,7 +21,22 @@
       "type": "shell",
       "command": "uvicorn yamlguard.server.main:app --reload --port 8000",
       "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": []
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "pattern": {
+            "regexp": ".*",
+            "file": 0,
+            "location": 1,
+            "message": 2
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*Reloading.*|.*Started reloader process.*",
+            "endsPattern": ".*Application startup complete.*"
+          }
+        }
+      ]
     },
     {
       "label": "Backend: Serve (no-reload 8000)",
@@ -42,6 +57,19 @@
       "label": "Build UI & Serve Backend",
       "dependsOn": ["UI: Build", "Backend: Serve (uvicorn)"],
       "dependsOrder": "sequence"
+    },
+    {
+      "label": "Dev: Start All (parallel)",
+      "dependsOn": ["Backend: Serve (uvicorn)", "UI: Dev Server"],
+      "dependsOrder": "parallel"
+    },
+    {
+      "label": "Dev: Start All (script)",
+      "type": "shell",
+      "command": "python scripts/start_all.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": []
     }
   ]
 }

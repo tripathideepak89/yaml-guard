@@ -64,6 +64,36 @@ npm run build
 
 If the `ui/dist` directory exists when the Python server starts, it will be mounted at `/ui` (e.g. http://127.0.0.1:8000/ui/).
 
+### One-Click Dev (Backend + UI)
+
+You can launch both the FastAPI backend (auto rule loading) and the React UI in a single step:
+
+Option 1 (VS Code Task):
+
+1. Open the command palette (Ctrl/Cmd+Shift+P) and run: Tasks: Run Task.
+2. Choose `Dev: Start All (parallel)`.
+3. This starts `uvicorn` (reload) and `npm run dev` concurrently.
+
+Option 2 (Python helper script):
+
+```bash
+python scripts/start_all.py
+```
+
+The script:
+* Finds free ports near 8000 (API) and 5173 (UI) if defaults are busy.
+* Exports `VITE_API_BASE` for the UI automatically.
+* Prints URLs once healthy.
+
+Flags:
+```bash
+python scripts/start_all.py --no-ui            # Only backend
+python scripts/start_all.py --no-api           # Only UI
+python scripts/start_all.py --api-port 9000 --ui-port 6000
+```
+
+Press Ctrl+C to stop both processes.
+
 ### Features
 
 * List available policies (`/v1/policies`) grouped by directory.
