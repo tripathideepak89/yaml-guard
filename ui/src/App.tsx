@@ -113,7 +113,7 @@ export const App: React.FC = () => {
       </section>
     </main>
     <footer>
-      <span>Backend: {(import.meta as any).env?.VITE_API_BASE || 'default http://127.0.0.1:8080'}</span>
+  <span>Backend: {(import.meta as any).env?.VITE_API_BASE || 'http://127.0.0.1:8000'}</span>
       <span style={{opacity:.6}}>YAML Guard © 2025</span>
     </footer>
   </div>;

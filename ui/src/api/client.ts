@@ -3,6 +3,7 @@ import { ValidateReq, ValidateResp, SuggestResp, PolicyListResp, PolicyFileResp 
 // Prefer 8000 (common local alt) then 8080 fallback if user sets VITE_API_BASE
 const DEFAULT_BASE = 'http://127.0.0.1:8000';
 export const API_BASE = (import.meta as any).env?.VITE_API_BASE || DEFAULT_BASE;
+console.info('[yaml-guard] API_BASE =', API_BASE);
 
 async function json<T>(resp: Response): Promise<T> {
   if (!resp.ok) {
@@ -12,12 +13,24 @@ async function json<T>(resp: Response): Promise<T> {
   return resp.json();
 }
 
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): Promise<T> {
+  let lastErr: any;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); } catch (e) { lastErr = e; if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs)); }
+  }
+  throw lastErr;
+}
+
 export async function listPolicies(): Promise<PolicyListResp> {
-  return json(await fetch(`${API_BASE}/v1/policies`));
+  return withRetry(async () => json(await fetch(`${API_BASE}/v1/policies`)));
 }
 
 export async function fetchPolicy(group: string, file: string): Promise<PolicyFileResp> {
-  return json(await fetch(`${API_BASE}/v1/policies/${encodeURIComponent(group)}/${encodeURIComponent(file)}`));
+  return json(
+    await fetch(
+      `${API_BASE}/v1/policies/${encodeURIComponent(group)}/${encodeURIComponent(file)}`
+    )
+  );
 }
 
 export async function validate(req: ValidateReq): Promise<ValidateResp> {

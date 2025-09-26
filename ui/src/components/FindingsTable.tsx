@@ -13,7 +13,12 @@ export const FindingsTable: React.FC<Props> = ({ findings }) => {
 
   const toggleFilter = (sev: string) => setFilter((f: string[]) => f.includes(sev) ? f.filter((s: string) => s!==sev) : [...f, sev]);
   const changeSort = (k: typeof sortKey) => {
-    if (k === sortKey) setSortDir((d: 1|-1) => d * -1); else { setSortKey(k); setSortDir(k==='severity'?-1:1); }
+    if (k === sortKey) {
+      setSortDir(prev => (prev === 1 ? -1 : 1));
+    } else {
+      setSortKey(k);
+      setSortDir(k === 'severity' ? -1 : 1);
+    }
   };
 
   const severitiesPresent = Array.from(new Set(findings.map((f: AssertionFinding) => f.severity)));

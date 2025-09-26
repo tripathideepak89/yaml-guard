@@ -33,6 +33,8 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
+    # Allow any localhost/127.0.0.1 dev port (UI may fall back to 5174/5175, etc.)
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
