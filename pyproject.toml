@@ -34,3 +34,6 @@ yamlguard = "yamlguard.cli.main:main"
 
 [tool.pytest.ini_options]
 addopts = "-q"
+markers = [
+  "integration: marks tests that spin up real server instances"
+]
