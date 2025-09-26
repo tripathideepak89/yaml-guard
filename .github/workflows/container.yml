@@ -1,0 +1,81 @@
+name: Container
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    name: Build test image & run pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test target (no push)
+        run: docker build --target test -t yamlguard:test .
+
+      - name: Run tests inside image
+        run: docker run --rm yamlguard:test
+
+  smoke-runtime:
+    name: Build runtime image & smoke test
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build runtime image
+        run: docker build -t yamlguard:runtime .
+
+      - name: Start container
+        run: docker run -d --name yamlguard-runtime -p 8000:8000 yamlguard:runtime
+
+      - name: Wait for health
+        run: |
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8000/health > /dev/null; then
+              echo "Healthy"; exit 0; fi; sleep 2; done; echo "Server failed to become healthy"; docker logs yamlguard-runtime; exit 1
+
+      - name: Smoke validate
+        run: docker exec yamlguard-runtime python scripts/smoke_validate.py --host http://127.0.0.1:8000
+
+      - name: Show logs (always)
+        if: always()
+        run: docker logs yamlguard-runtime || true
+
+  push-image:
+    name: Publish image (main only)
+    runs-on: ubuntu-latest
+    needs: smoke-runtime
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push multi-arch image
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/yamlguard
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t $IMAGE:latest \
+            -t $IMAGE:${{ github.sha }} \
+            --push .
+      - name: Summary
+        run: echo "Published ghcr.io/${{ github.repository_owner }}/yamlguard:latest" >> $GITHUB_STEP_SUMMARY

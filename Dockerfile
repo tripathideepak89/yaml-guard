@@ -41,6 +41,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY policies ./policies
 COPY examples ./examples
+COPY scripts ./scripts
 
 ######## INSTALL PROD DEPS ########
 RUN pip install --upgrade pip && pip install .
