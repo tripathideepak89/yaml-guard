@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "UI: Dev Server",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/ui" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "UI: Build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/ui" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: Serve (uvicorn)",
+      "type": "shell",
+      "command": "uvicorn yamlguard.server.main:app --reload --port 8000",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: Serve (no-reload 8000)",
+      "type": "shell",
+      "command": "python -m uvicorn yamlguard.server.main:app --port 8000",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Smoke: Validate & Suggest",
+      "type": "shell",
+      "command": "python scripts/smoke_validate.py --host http://127.0.0.1:8000",
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": ["Backend: Serve (no-reload 8000)"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build UI & Serve Backend",
+      "dependsOn": ["UI: Build", "Backend: Serve (uvicorn)"],
+      "dependsOrder": "sequence"
+    }
+  ]
+}

@@ -14,13 +14,15 @@ Requires-Dist: pydantic>=2.7
 Provides-Extra: dev
 Requires-Dist: pytest>=8.3; extra == "dev"
 Requires-Dist: pre-commit>=3.7; extra == "dev"
+Requires-Dist: httpx>=0.27; extra == "dev"
 
 # YAML Guard (Local Starter)
 
 
 A minimal, local-first DevSecOps helper that validates and lint/guards YAML files with simple rules. It exposes:
 - A **CLI**: `yamlguard <files|globs> [--rules policies/k8s/core.yaml] [--optimize]`
-- A **REST API** (FastAPI) at `http://127.0.0.1:8080` with a `/v1/validate` endpoint.
+- A **REST API** (FastAPI) at `http://127.0.0.1:8000` with endpoints like `/v1/validate`, `/v1/policies`, `/v1/suggest`.
+- A lightweight **Web UI** (React + Vite) for uploading/editing YAML, loading policy rules, validating, and viewing auto-fix suggestions.
 
 
 ## Quick start
@@ -42,10 +44,82 @@ pytest
 
 
 # 5) Start API server
-uvicorn yamlguard.server.main:app --reload --port 8080
+uvicorn yamlguard.server.main:app --reload --port 8000
 
 
 # 6) Call the API (same machine)
 curl -s -H "Content-Type: application/json" \
--d '{"files":[{"path":"pod-bad.yaml","content":"'"$(cat examples/pod-bad.yaml | sed 's/"/\\"/g')"'"}],"optimize":false,"rules":'"$(cat policies/k8s/core.yaml | jq -Rs '.')"'}' \
-http://127.0.0.1:8080/v1/validate | jq .
+	-d '{"files":[{"path":"pod-bad.yaml","content":"'"$(cat examples/pod-bad.yaml | sed 's/"/\\"/g')"'"}],"optimize":false,"rules":'"$(cat policies/k8s/core.yaml | jq -Rs '.')"'}' \
+	http://127.0.0.1:8000/v1/validate | jq .
+```
+
+## Web UI
+
+The optional web UI lives under `ui/` and talks to the local FastAPI server.
+
+### Dev Mode
+
+```bash
+cd ui
+npm install
+npm run dev
+```
+
+Open http://127.0.0.1:5173 (the UI will call the API at `http://127.0.0.1:8000` by default).
+
+You can override the backend base via an environment variable when starting Vite:
+
+```bash
+VITE_API_BASE=http://127.0.0.1:8000 npm run dev
+```
+
+### Production Build & Serve
+
+```bash
+cd ui
+npm run build
+```
+
+If the `ui/dist` directory exists when the Python server starts, it will be mounted at `/ui` (e.g. http://127.0.0.1:8000/ui/).
+
+### Features
+
+* List available policies (`/v1/policies`) grouped by directory.
+* View raw policy file content and add its rules to the in-memory working set.
+* Create / edit multiple YAML files inline and validate against selected rules.
+* View findings with severity, file, JSONPath, message, line number, and snippets.
+* Request suggestions (aggregated or per-finding) and view unified diffs.
+* Toggle optimization (canonicalization) when validating.
+* Automatic policy rule loading: omit `rules` (or pass empty list) and the server aggregates rules from every file under `policies/**`.
+
+
+### Roadmap Ideas
+
+* Persist last edited docs in `localStorage` (DONE).
+* Drag & drop file upload (DONE).
+* Export patched YAML after applying suggestions (DONE).
+* Rule editor / authoring workflow (PLANNED).
+
+## Smoke Test Scripts
+
+After starting the API (e.g. on port 8000), you can run a quick end-to-end smoke test:
+
+```bash
+python scripts/smoke_validate.py --host http://127.0.0.1:8000
+```
+
+OR using the requests-based variant:
+
+```bash
+python scripts/smoke_requests.py --host http://127.0.0.1:8000
+```
+
+Sample output:
+
+```
+Validate: ok=False findings=3 (high:2, medium:1)
+Suggest: suggestions=1
+	First suggestion title: Pin image tag
+```
+
+This aggregates all policy rules (either client-side or via omission on the API) and exercises `/v1/validate` and `/v1/suggest`.
