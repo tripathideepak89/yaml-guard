@@ -1,0 +1,15 @@
+# A fully compliant Pod example matching current K8S rules.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-detailed-pod
+  labels:
+    app: demo
+spec:
+  containers:
+    - name: web
+      image: nginx:1.25@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      resources:
+        limits:
+          cpu: "200m"
+          memory: "256Mi"

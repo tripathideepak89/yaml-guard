@@ -104,6 +104,22 @@ Press Ctrl+C to stop both processes.
 * Toggle optimization (canonicalization) when validating.
 * Automatic policy rule loading: omit `rules` (or pass empty list) and the server aggregates rules from every file under `policies/**`.
 
+## Example Manifests
+
+The `examples/` directory now contains a variety of sample YAMLs illustrating policy outcomes:
+
+| File | Purpose / Expected Findings |
+|------|-----------------------------|
+| `pod-bad.yaml` | Minimal Pod with `:latest` tag, no digest, no limits (all 3 K8S rules fire). |
+| `pod-bad-structured.yaml` | Same as above but nicely indented for snippet extraction tests. |
+| `pod-good.yaml` | Pod with pinned tag+digest & limits (0 findings). |
+| `pod-good-detailed.yaml` | Richer good example with labels and different limits (0 findings). |
+| `pod-mixed.yaml` | Two containers: one bad, one good (selective findings). |
+| `multi-doc-pods.yaml` | Multi-document file: first bad, second good (checks multi-doc parsing). |
+| `pod-with-secrets-leak.yaml` | Sanitized placeholders illustrating where secrets would reside (replace locally to test rules; do NOT commit real-looking tokens). |
+
+These support smoke tests, manual experimentation in the UI, and regression coverage expansion.
+
 
 ### Roadmap Ideas
 

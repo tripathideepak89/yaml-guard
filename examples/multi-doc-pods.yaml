@@ -1,0 +1,23 @@
+# Multi-document YAML with one bad and one good Pod.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-pod-multi
+spec:
+  containers:
+    - name: web
+      image: nginx:latest
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-pod-multi
+spec:
+  containers:
+    - name: web
+      image: nginx:1.25@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      resources:
+        limits:
+          cpu: "150m"
+          memory: "192Mi"

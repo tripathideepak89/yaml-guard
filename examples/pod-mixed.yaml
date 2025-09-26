@@ -1,0 +1,20 @@
+# A Pod containing two containers: one compliant, one violating policies.
+# Violations expected:
+# - nginx:latest -> K8S-NO-LATEST-TAG
+# - nginx:latest (no digest) -> K8S-IMAGE-PIN-DIGEST
+# - missing resources.limits for the 'bad' container -> K8S-RESOURCES-LIMITS-PRESENT
+# Compliant container has pinned tag + digest and resource limits.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mixed-pod
+spec:
+  containers:
+    - name: bad-web
+      image: nginx:latest
+    - name: good-web
+      image: nginx:1.25@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
