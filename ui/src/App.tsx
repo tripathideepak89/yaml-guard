@@ -4,6 +4,7 @@ import { PolicyViewer } from './components/PolicyViewer';
 import { YamlEditor } from './components/YamlEditor';
 import { FindingsTable } from './components/FindingsTable';
 import { SuggestionsPanel } from './components/SuggestionsPanel';
+import { CIConverter } from './components/CIConverter';
 import { validate, suggest } from './api/client';
 import { AssertionFinding, SuggestionOut, FileIn } from './types';
 import { applyUnifiedDiff } from './utils/patch';
@@ -92,6 +93,7 @@ export const App: React.FC = () => {
       <aside>
         <PolicyList onSelect={(group,file)=> setPolicySel({group,file})} selected={policySel} />
         <PolicyViewer group={policySel?.group||null} file={policySel?.file||null} onAddRules={(r)=> setRules(prev => [...prev, ...r])} />
+        <CIConverter docs={docs} />
         <div className="panel">
           <h3>Loaded Rules ({rules.length})</h3>
           {rules.length>0 && <button onClick={clearRules}>Clear</button>}
@@ -103,7 +105,7 @@ export const App: React.FC = () => {
         <div className="actions-row">
           <label><input type="checkbox" checked={optimize} onChange={e=> setOptimize(e.target.checked)} /> Optimize</label>
           <button onClick={runValidate} disabled={busy}>Validate</button>
-            <button onClick={runSuggest} disabled={busy || !findings.length}>Suggest Fixes</button>
+          <button onClick={runSuggest} disabled={busy || !findings.length}>Suggest Fixes</button>
           <button onClick={applyAllSuggestions} disabled={!suggestions.length}>Apply All</button>
           <button onClick={prepareDownload} disabled={!docs.length}>Prep Download</button>
           {downloadReady && <a className="download-link" href={downloadReady} download="yamlguard.yaml">Download YAML</a>}

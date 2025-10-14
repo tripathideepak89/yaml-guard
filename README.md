@@ -12,6 +12,11 @@ A minimal, local-first DevSecOps helper that validates and lint/guards YAML file
 # 1) Create and enter a virtual environment (recommended)
 python -m venv .venv && source .venv/bin/activate
 
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+
 
 # 2) Install in editable mode (and test deps)
 pip install -e .[dev]
@@ -19,7 +24,8 @@ pip install -e .[dev]
 
 # 3) Try the CLI
 yamlguard examples/pod-bad.yaml --rules policies/k8s/core.yaml || true
-
+or 
+yamlguard examples/pod-bad.yaml --rules policies/k8s/core.yaml 2>$null
 
 # 4) Run tests
 pytest
@@ -103,6 +109,7 @@ Press Ctrl+C to stop both processes.
 * Request suggestions (aggregated or per-finding) and view unified diffs.
 * Toggle optimization (canonicalization) when validating.
 * Automatic policy rule loading: omit `rules` (or pass empty list) and the server aggregates rules from every file under `policies/**`.
+* **CI/CD Workflow Converter**: Auto-detect and convert between GitHub Actions, GitLab CI, Azure Pipelines, CircleCI, and Jenkins formats.
 
 ## Example Manifests
 
@@ -117,6 +124,10 @@ The `examples/` directory now contains a variety of sample YAMLs illustrating po
 | `pod-mixed.yaml` | Two containers: one bad, one good (selective findings). |
 | `multi-doc-pods.yaml` | Multi-document file: first bad, second good (checks multi-doc parsing). |
 | `pod-with-secrets-leak.yaml` | Sanitized placeholders illustrating where secrets would reside (replace locally to test rules; do NOT commit real-looking tokens). |
+| `github-workflow.yml` | Example GitHub Actions workflow for CI converter testing. |
+| `gitlab-ci.yml` | Example GitLab CI pipeline for CI converter testing. |
+| `azure-pipelines.yml` | Example Azure Pipelines configuration for CI converter testing. |
+| `circleci-config.yml` | Example CircleCI configuration for CI converter testing. |
 
 These support smoke tests, manual experimentation in the UI, and regression coverage expansion.
 

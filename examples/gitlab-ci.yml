@@ -1,0 +1,36 @@
+# Example GitLab CI pipeline
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  NODE_VERSION: "18"
+
+before_script:
+  - echo "Starting pipeline"
+
+build_job:
+  stage: build
+  image: node:18
+  script:
+    - npm install
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+
+test_job:
+  stage: test
+  image: node:18
+  script:
+    - npm install
+    - npm test
+
+deploy_job:
+  stage: deploy
+  script:
+    - echo "Deploying application"
+    - ./deploy.sh
+  only:
+    - main

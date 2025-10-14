@@ -83,6 +83,36 @@ npm run build
 
 If the `ui/dist` directory exists when the Python server starts, it will be mounted at `/ui` (e.g. http://127.0.0.1:8000/ui/).
 
+### One-Click Dev (Backend + UI)
+
+You can launch both the FastAPI backend (auto rule loading) and the React UI in a single step:
+
+Option 1 (VS Code Task):
+
+1. Open the command palette (Ctrl/Cmd+Shift+P) and run: Tasks: Run Task.
+2. Choose `Dev: Start All (parallel)`.
+3. This starts `uvicorn` (reload) and `npm run dev` concurrently.
+
+Option 2 (Python helper script):
+
+```bash
+python scripts/start_all.py
+```
+
+The script:
+* Finds free ports near 8000 (API) and 5173 (UI) if defaults are busy.
+* Exports `VITE_API_BASE` for the UI automatically.
+* Prints URLs once healthy.
+
+Flags:
+```bash
+python scripts/start_all.py --no-ui            # Only backend
+python scripts/start_all.py --no-api           # Only UI
+python scripts/start_all.py --api-port 9000 --ui-port 6000
+```
+
+Press Ctrl+C to stop both processes.
+
 ### Features
 
 * List available policies (`/v1/policies`) grouped by directory.
@@ -92,6 +122,22 @@ If the `ui/dist` directory exists when the Python server starts, it will be moun
 * Request suggestions (aggregated or per-finding) and view unified diffs.
 * Toggle optimization (canonicalization) when validating.
 * Automatic policy rule loading: omit `rules` (or pass empty list) and the server aggregates rules from every file under `policies/**`.
+
+## Example Manifests
+
+The `examples/` directory now contains a variety of sample YAMLs illustrating policy outcomes:
+
+| File | Purpose / Expected Findings |
+|------|-----------------------------|
+| `pod-bad.yaml` | Minimal Pod with `:latest` tag, no digest, no limits (all 3 K8S rules fire). |
+| `pod-bad-structured.yaml` | Same as above but nicely indented for snippet extraction tests. |
+| `pod-good.yaml` | Pod with pinned tag+digest & limits (0 findings). |
+| `pod-good-detailed.yaml` | Richer good example with labels and different limits (0 findings). |
+| `pod-mixed.yaml` | Two containers: one bad, one good (selective findings). |
+| `multi-doc-pods.yaml` | Multi-document file: first bad, second good (checks multi-doc parsing). |
+| `pod-with-secrets-leak.yaml` | Sanitized placeholders illustrating where secrets would reside (replace locally to test rules; do NOT commit real-looking tokens). |
+
+These support smoke tests, manual experimentation in the UI, and regression coverage expansion.
 
 
 ### Roadmap Ideas
@@ -124,3 +170,102 @@ Suggest: suggestions=1
 ```
 
 This aggregates all policy rules (either client-side or via omission on the API) and exercises `/v1/validate` and `/v1/suggest`.
+
+## Containerized Usage
+
+You can build and run a container that bundles the FastAPI backend and the compiled React UI (served at `/ui`).
+
+### Build Image
+
+```bash
+docker build -t yamlguard:latest .
+```
+
+Override the baked-in API base for the UI (default `http://localhost:8000`) during build:
+
+```bash
+docker build --build-arg VITE_API_BASE=http://localhost:8000 -t yamlguard:latest .
+```
+
+### Run Container
+
+```bash
+docker run --rm -p 8000:8000 yamlguard:latest
+```
+
+Open:
+- API: http://127.0.0.1:8000/v1/policies
+- UI:  http://127.0.0.1:8000/ui/
+
+The container includes all policy files under `policies/**` and examples under `examples/`.
+
+### docker-compose (Recommended for Dev + Tests)
+
+Bring up the API (and UI) with:
+
+```bash
+docker compose up --build
+```
+
+Run tests in an isolated stage:
+
+```bash
+docker compose --profile test up --build --abort-on-container-exit --exit-code-from tests
+```
+
+Or build and execute the test target directly:
+
+```bash
+docker build -t yamlguard-test --target test .
+docker run --rm yamlguard-test
+```
+
+### Hot-Reload UI Separately (Optional)
+
+If you want live UI development while the API runs in the container, enable the `dev` profile which launches a lightweight Node container mounting your local `ui/` directory:
+
+```bash
+docker compose --profile dev up api ui-dev
+```
+
+This keeps the Python API inside the image while Vite serves the UI with hot reload on your host at http://127.0.0.1:5173.
+
+### Passing Custom Policies
+
+Mount a host directory containing additional policies:
+
+```bash
+docker run --rm -p 8000:8000 -v "$(pwd)/policies:/app/policies:ro" yamlguard:latest
+```
+
+### Health Check
+
+The image includes a Docker healthcheck hitting `/health`. Compose will report the container as healthy once the FastAPI app is ready.
+
+### Smoke Test Against Running Container
+
+```bash
+python scripts/smoke_validate.py --host http://127.0.0.1:8000
+```
+
+Or from another container (after compose up):
+
+```bash
+docker compose exec api python scripts/smoke_validate.py --host http://127.0.0.1:8000
+```
+
+### Suggested Workflow
+
+1. Iterate locally (Python / UI) as before.
+2. Build image to ensure reproducibility.
+3. Run test target (or compose test profile) in CI to guarantee production parity.
+4. Ship the single image (contains both API + static UI) to your registry.
+
+### Image Size Optimization (Future)
+
+Potential optimizations not yet applied:
+* Use `--only=production` or `pnpm` for faster UI install.
+* Multi-stage with a wheel build + slim runtime copying only wheels.
+* Distroless / Python base trimming once dependencies stabilized.
+
+Contributions welcome!

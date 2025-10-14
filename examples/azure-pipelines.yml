@@ -1,0 +1,27 @@
+# Example Azure Pipelines
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  nodeVersion: '18.x'
+
+jobs:
+- job: Build
+  displayName: 'Build and Test'
+  steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: $(nodeVersion)
+    displayName: 'Install Node.js'
+  
+  - script: npm install
+    displayName: 'Install dependencies'
+  
+  - script: npm test
+    displayName: 'Run tests'
+  
+  - script: npm run build
+    displayName: 'Build application'
