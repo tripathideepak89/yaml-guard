@@ -2,13 +2,17 @@
 import glob
 import os
 import pathlib
+import time
+from collections import defaultdict
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+import importlib.metadata
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from yamlguard.core.loader import dump_yaml, load_yaml
 from yamlguard.core.locate import guess_location
@@ -16,29 +20,70 @@ from yamlguard.core.optimize import canonicalize
 from yamlguard.core.recommend import suggest_for_file, suggest_for_finding
 from yamlguard.core.rules import apply_rules
 
-app = FastAPI(title="YAML Guard (Local)")
+app = FastAPI(title="YAML Guard API", version="1.0.0")
 
-# Configurable CORS origins via env (comma separated) else default localhost dev origins
-_origins_env = os.getenv("YAML_GUARD_ALLOWED_ORIGINS")
-if _origins_env:
-    _allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
+# Production CORS configuration
+_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+if _origins_env == "*":
+    _allowed_origins = ["*"]
 else:
-    _allowed_origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
+    _allowed_origins = [o.strip() for o in _origins_env.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    # Allow any localhost/127.0.0.1 dev port (UI may fall back to 5174/5175, etc.)
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_credentials=True if _allowed_origins != ["*"] else False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Request size limit middleware
+MAX_BYTES = int(os.environ.get("MAX_BYTES", "2000000"))
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method in ["POST", "PUT", "PATCH"]:
+            content_length = request.headers.get("content-length")
+            if content_length and int(content_length) > MAX_BYTES:
+                return Response(
+                    content="Request too large",
+                    status_code=413,
+                    media_type="text/plain"
+                )
+        return await call_next(request)
+
+app.add_middleware(RequestSizeLimitMiddleware)
+
+# Simple in-memory rate limiting
+RL_WINDOW_SECONDS = int(os.environ.get("RL_WINDOW_SECONDS", "60"))
+RL_MAX_REQUESTS = int(os.environ.get("RL_MAX_REQUESTS", "120"))
+rate_limit_storage = defaultdict(list)
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        
+        # Clean old entries
+        rate_limit_storage[client_ip] = [
+            timestamp for timestamp in rate_limit_storage[client_ip]
+            if now - timestamp < RL_WINDOW_SECONDS
+        ]
+        
+        # Check rate limit
+        if len(rate_limit_storage[client_ip]) >= RL_MAX_REQUESTS:
+            return Response(
+                content="Rate limit exceeded",
+                status_code=429,
+                media_type="text/plain"
+            )
+        
+        # Record this request
+        rate_limit_storage[client_ip].append(now)
+        
+        return await call_next(request)
+
+app.add_middleware(RateLimitMiddleware)
 
 # ---- Models ----
 
@@ -119,6 +164,18 @@ class PolicyFileResp(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/version")
+def version():
+    try:
+        version = importlib.metadata.version("yamlguard")
+    except importlib.metadata.PackageNotFoundError:
+        version = "0.0.0"
+    return {"version": version}
+
+@app.get("/favicon.ico")
+def favicon():
+    return Response(status_code=204)
 
 
 POLICY_BASE_DIR = os.path.abspath(

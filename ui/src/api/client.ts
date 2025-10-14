@@ -1,8 +1,11 @@
 import { ValidateReq, ValidateResp, SuggestResp, PolicyListResp, PolicyFileResp } from '../types';
 
-// Prefer 8000 (common local alt) then 8080 fallback if user sets VITE_API_BASE
+// Production-ready API base detection
 const DEFAULT_BASE = 'http://127.0.0.1:8000';
-export const API_BASE = (import.meta as any).env?.VITE_API_BASE || DEFAULT_BASE;
+export const API_BASE = (import.meta as any).env?.VITE_API_URL ?? 
+                        (import.meta as any).env?.VITE_API_BASE ?? 
+                        window.location.origin;
+
 console.info('[yaml-guard] API_BASE =', API_BASE);
 
 async function json<T>(resp: Response): Promise<T> {
