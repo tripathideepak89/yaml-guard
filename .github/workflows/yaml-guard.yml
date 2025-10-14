@@ -53,111 +53,60 @@ jobs:
           pip install -e .[dev]
 
       # Run YAML Guard twice (K8s + Secrets), capture JSON, and merge
-      - name: Run YAML Guard and build combined suggestions
+      - name: Run YAML Guard and combined suggestions
         id: collect
         run: |
-            set -e
-            python - <<'PY'
-            import json, glob, yaml as pyyaml, os
-            from yamlguard.core.loader import load_yaml
-            from yamlguard.core.rules import apply_rules
-            from yamlguard.core.recommend import suggest_for_file
-
-            # Load rules
-            k8s = pyyaml.safe_load(open("policies/k8s/core.yaml", encoding="utf-8")) or []
-            sec = pyyaml.safe_load(open("policies/security/secrets.yaml", encoding="utf-8")) or []
-            all_rules = k8s + sec
-
-            def wanted(path: str) -> bool:
-            # exclude policy files themselves to avoid self-flagging
-            return not (path.startswith("policies/") or "/policies/" in path)
-
-            # collect YAML files excluding policies/**
-            paths = [p for p in glob.glob("**/*.y*ml", recursive=True) if wanted(p)]
-
-            findings, suggestions = [], []
-
-            for path in paths:
-                try:
-                    text = open(path, encoding="utf-8").read()
-                    doc = load_yaml(text)
-                except Exception:
-                    continue
-
-                fs = apply_rules(doc, all_rules)
-                for f in fs:
-                    f["file"] = path
-                findings.extend(fs)
-
-                combo = suggest_for_file(path, fs, text)
-                if combo:
-                    suggestions.append({
-                        "file": path,
-                        "title": combo.title,
-                        "rationale": combo.rationale,
-                        "diff": combo.diff,
-                        "confidence": combo.confidence
-                    })
-
-            with open("findings.json","w",encoding="utf-8") as f:
-                json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
-
-            if findings:
-                open("${GITHUB_OUTPUT}","a").write("has_findings=true\n")
-            if suggestions:
-                open("${GITHUB_OUTPUT}","a").write("has_suggestions=true\n")
-            PY
-
-
-      # Emit GitHub Annotations + Step Summary, and expose an output if findings exist
-      - name: Annotate & summarize
-        id: annotate
-        if: always()
-        run: |
+          set -e
           python - <<'PY'
-          import json, os, sys
-          data = json.load(open("findings.json", encoding="utf-8"))
-          fins = data.get("findings", [])
+          import json, glob, yaml as pyyaml
+          from yamlguard.core.loader import load_yaml
+          from yamlguard.core.rules import apply_rules
+          from yamlguard.core.recommend import suggest_for_file
 
-          # GitHub Annotations
-          for x in fins:
-              sev = (x.get("severity","") or "").lower()
-              level = "error" if sev in ("high","critical") else "warning"
-              msg = f"[{x.get('severity','').upper()}] {x.get('rule_id','')}: {x.get('message','')}"
-              file = x.get("file","")
-              line = x.get("line")
-              if file:
-                  if line:
-                      print(f"::{level} file={file},line={line}::{msg}")
-                  else:
-                      print(f"::{level} file={file}::{msg}")
-              else:
-                  print(f"::{level}::{msg}")
+          # Load rules
+          k8s = pyyaml.safe_load(open("policies/k8s/core.yaml", encoding="utf-8")) or []
+          sec = pyyaml.safe_load(open("policies/security/secrets.yaml", encoding="utf-8")) or []
+          all_rules = k8s + sec
 
-          # Step summary
-          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-          if summary_path:
-              with open(summary_path, "a", encoding="utf-8") as s:
-                  if not fins:
-                      s.write("### YAML Guard: no findings ✅\n")
-                  else:
-                      s.write(f"### YAML Guard: {len(fins)} finding(s) ❌\n\n")
-                      for x in fins:
-                          loc = (x.get("file","") or "")
-                          if x.get("line"):
-                              loc += f":{x['line']}"
-                          s.write(f"- **{x.get('severity','')}** `{x.get('rule_id','')}` — {x.get('message','')}\n")
-                          if loc:
-                              s.write(f"  \n  `{loc}`\n")
-                          snip = x.get("snippet")
-                          if snip:
-                              s.write(f"  \n```yaml\n{snip}\n```\n")
+          # Collect YAML files excluding policies/**
+          paths = [p for p in glob.glob("**/*.y*ml", recursive=True)
+                  if not (p.startswith("policies/") or "/policies/" in p)]
 
-          # Output flag for next step
-          if fins:
-              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-                  out.write("has_findings=true\n")
+          findings, suggestions = [], []
+
+          for path in paths:
+              try:
+                  text = open(path, encoding="utf-8").read()
+                  doc = load_yaml(text)
+              except Exception:
+                  continue
+
+              fs = apply_rules(doc, all_rules)
+              for f in fs:
+                  f["file"] = path
+              findings.extend(fs)
+
+              combo = suggest_for_file(path, fs, text)
+              if combo:
+                  suggestions.append({
+                      "file": path,
+                      "title": combo.title,
+                      "rationale": combo.rationale,
+                      "diff": combo.diff,
+                      "confidence": combo.confidence
+                  })
+
+          with open("findings.json","w",encoding="utf-8") as f:
+              json.dump({"findings": findings, "suggestions": suggestions}, f, ensure_ascii=False)
+
+          # Expose outputs for later steps
+          if findings:
+              open("${GITHUB_OUTPUT}","a").write("has_findings=true\n")
+          if suggestions:
+              open("${GITHUB_OUTPUT}","a").write("has_suggestions=true\n")
           PY
+          cat findings.json
+
 
       # Post a PR comment with a readable, condensed report
       - name: Comment on PR
